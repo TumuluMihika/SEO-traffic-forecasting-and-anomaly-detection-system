@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>SEO Traffic Forecasting & Anomaly Detection</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root{
+    --bg:#0f1117; --card:#1a1d27; --card2:#20243a;
+    --accent:#6c63ff; --accent2:#00d4aa; --accent3:#ff6b6b;
+    --accent4:#ffd166; --text:#e2e8f0; --muted:#94a3b8;
+    --border:#2d3250; --radius:12px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;min-height:100vh}
+  header{background:linear-gradient(135deg,#1a1d27,#20243a);border-bottom:1px solid var(--border);
+    padding:18px 32px;display:flex;align-items:center;justify-content:space-between}
+  header h1{font-size:1.35rem;font-weight:700;color:#fff}
+  header h1 span{color:var(--accent)}
+  .badge{background:var(--accent);color:#fff;font-size:.7rem;padding:3px 10px;border-radius:20px;margin-left:10px}
+  .main{max-width:1400px;margin:0 auto;padding:24px 28px}
+
+  /* Stat cards */
+  .stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:24px}
+  .stat-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:20px}
+  .stat-card .label{font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+  .stat-card .value{font-size:1.7rem;font-weight:700;color:#fff}
+  .stat-card .sub{font-size:.72rem;color:var(--muted);margin-top:4px}
+  .stat-card.green .value{color:var(--accent2)}
+  .stat-card.purple .value{color:var(--accent)}
+  .stat-card.red .value{color:var(--accent3)}
+  .stat-card.yellow .value{color:var(--accent4)}
+
+  /* Section */
+  .section{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:22px;margin-bottom:24px}
+  .section-title{font-size:.85rem;font-weight:600;text-transform:uppercase;letter-spacing:.8px;
+    color:var(--muted);margin-bottom:18px;display:flex;align-items:center;gap:8px}
+  .dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+  .dot-purple{background:var(--accent)} .dot-green{background:var(--accent2)}
+  .dot-red{background:var(--accent3)} .dot-yellow{background:var(--accent4)}
+
+  /* Chart */
+  .chart-wrap{position:relative;height:320px}
+  .chart-wrap.tall{height:250px}
+
+  /* Metrics table */
+  table{width:100%;border-collapse:collapse;font-size:.83rem}
+  th{background:#12151e;padding:10px 14px;text-align:left;color:var(--muted);
+     font-weight:600;font-size:.72rem;text-transform:uppercase;letter-spacing:.5px}
+  td{padding:10px 14px;border-top:1px solid var(--border)}
+  tr:hover td{background:rgba(108,99,255,.06)}
+  .best{color:var(--accent2);font-weight:700}
+  .model-tag{padding:3px 10px;border-radius:20px;font-size:.72rem;font-weight:600}
+  .tag-sarima{background:rgba(108,99,255,.18);color:var(--accent)}
+  .tag-gru{background:rgba(0,212,170,.18);color:var(--accent2)}
+  .tag-hybrid{background:rgba(255,107,107,.18);color:var(--accent3)}
+
+  /* Anomaly */
+  .anomaly-list{display:flex;flex-direction:column;gap:10px;max-height:400px;overflow-y:auto}
+  .anomaly-card{background:var(--card2);border-radius:8px;padding:14px 16px;
+    border-left:3px solid var(--accent3);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  .anomaly-card.spike{border-color:var(--accent4)}
+  .anomaly-card.algo{border-color:var(--accent)}
+  .anomaly-date{font-size:.8rem;color:var(--muted);min-width:90px}
+  .anomaly-cause{font-size:.8rem;font-weight:600}
+  .severity-tag{font-size:.67rem;padding:2px 8px;border-radius:10px;border:1px solid}
+  .sev-low{border-color:#4ade80;color:#4ade80}
+  .sev-medium{border-color:var(--accent4);color:var(--accent4)}
+  .sev-high{border-color:var(--accent3);color:var(--accent3)}
+  .anomaly-delta{font-size:.78rem;color:var(--muted);margin-left:auto}
+
+  /* Controls */
+  .controls{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px;align-items:center}
+  .btn{background:var(--accent);color:#fff;border:none;padding:9px 20px;border-radius:8px;
+    cursor:pointer;font-size:.82rem;font-weight:600;transition:.2s}
+  .btn:hover{background:#7c75ff}
+  .btn.secondary{background:var(--card2);border:1px solid var(--border);color:var(--text)}
+  .btn.secondary:hover{background:var(--border)}
+  select{background:var(--card2);color:var(--text);border:1px solid var(--border);
+    padding:8px 14px;border-radius:8px;font-size:.82rem}
+
+  /* Training log */
+  .log-box{background:#0a0c12;border:1px solid var(--border);border-radius:8px;
+    padding:14px;font-family:monospace;font-size:.78rem;color:#a0aec0;
+    max-height:220px;overflow-y:auto;line-height:1.7}
+  .log-line.ok{color:var(--accent2)} .log-line.err{color:var(--accent3)}
+
+  /* Grid layout */
+  .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+  @media(max-width:900px){.grid-2{grid-template-columns:1fr}}
+
+  .loading{text-align:center;padding:40px;color:var(--muted)}
+  .spinner{display:inline-block;width:24px;height:24px;border:2px solid var(--border);
+    border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  /* Donut chart area */
+  .donut-wrap{height:200px;display:flex;align-items:center;justify-content:center}
+
+  /* Upload zone */
+  .upload-zone{border:2px dashed var(--border);border-radius:var(--radius);padding:28px 24px;
+    text-align:center;cursor:pointer;transition:.25s;position:relative;background:var(--bg)}
+  .upload-zone:hover,.upload-zone.dragover{border-color:var(--accent);background:rgba(108,99,255,.07)}
+  .upload-zone input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+  .upload-icon{font-size:2rem;margin-bottom:8px}
+  .upload-title{font-size:.9rem;font-weight:600;color:#fff;margin-bottom:5px}
+  .upload-sub{font-size:.74rem;color:var(--muted);line-height:1.7}
+  .upload-msg{margin-top:12px;padding:10px 14px;border-radius:8px;font-size:.79rem;display:none;text-align:left}
+  .upload-msg.success{background:rgba(0,212,170,.1);color:var(--accent2);border:1px solid rgba(0,212,170,.25)}
+  .upload-msg.error{background:rgba(255,107,107,.1);color:var(--accent3);border:1px solid rgba(255,107,107,.25)}
+  .upload-msg.info{background:rgba(108,99,255,.1);color:var(--accent);border:1px solid rgba(108,99,255,.25)}
+  .active-file{display:inline-flex;align-items:center;gap:8px;background:rgba(0,212,170,.1);
+    border:1px solid rgba(0,212,170,.25);padding:5px 14px;border-radius:20px;
+    font-size:.75rem;color:var(--accent2);margin-top:10px}
+  .col-pill{font-family:monospace;font-size:.7rem;background:rgba(108,99,255,.15);
+    color:var(--accent);padding:2px 7px;border-radius:4px;margin:2px;display:inline-block}
+  .grid-upload{display:grid;grid-template-columns:1.2fr 1fr;gap:20px}
+  @media(max-width:860px){.grid-upload{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1><span>SEO</span> Traffic Forecasting <span style="color:var(--accent2)">& Anomaly Detection</span></h1>
+    <span class="badge">Final Year Project</span>
+  </div>
+  <div style="display:flex;gap:10px;align-items:center">
+    <div id="statusDot" style="width:10px;height:10px;border-radius:50%;background:#555"></div>
+    <span id="statusText" style="font-size:.8rem;color:var(--muted)">Checking...</span>
+    <button class="btn" onclick="startTraining()">▶ Train Models</button>
+  </div>
+</header>
+
+<div class="main">
+
+
+  <!-- Upload Section -->
+  <div class="section">
+    <div class="section-title"><span class="dot dot-green"></span> Dataset Upload</div>
+    <div class="grid-upload">
+
+      <!-- Drop Zone -->
+      <div>
+        <div class="upload-zone" id="dropZone"
+             ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event)">
+          <input type="file" id="fileInput" accept=".csv" onchange="onFileSelected(event)">
+          <div class="upload-icon">📂</div>
+          <div class="upload-title">Drop your CSV here or click to browse</div>
+          <div class="upload-sub">
+            Minimum required columns:<br>
+            <span class="col-pill">Date</span>
+            <span class="col-pill">Organic_Traffic</span><br><br>
+            Common names auto-detected: ds, y, traffic, visits, sessions, page_loads<br>
+            Max file size: 50 MB
+          </div>
+        </div>
+        <div id="uploadMsg" class="upload-msg"></div>
+        <div id="activeFile" style="display:none" class="active-file">
+          <span></span><span id="activeFileName"></span>
+          <span onclick="resetDataset()"
+                style="cursor:pointer;color:var(--accent3);font-weight:700;margin-left:6px"
+                title="Remove uploaded file">✕</span>
+        </div>
+      </div>
+
+      <!-- Format Guide -->
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:18px">
+        <div style="font-size:.78rem;font-weight:600;color:var(--muted);text-transform:uppercase;
+                    letter-spacing:.5px;margin-bottom:12px">Accepted CSV Format</div>
+        <div style="font-family:monospace;font-size:.72rem;color:#a0aec0;line-height:1.9;
+                    background:#0a0c12;padding:12px;border-radius:8px">
+          <span style="color:#6c63ff">Date</span>,
+          <span style="color:#00d4aa">Organic_Traffic</span>,
+          <span style="color:#94a3b8">Impressions,CTR,...</span><br>
+          2024-01-01,<span style="color:#00d4aa">3200</span>,9500,0.034,...<br>
+          2024-01-02,<span style="color:#00d4aa">4100</span>,11200,0.037,...<br>
+          2024-01-03,<span style="color:#00d4aa">3800</span>,10100,0.038,...
+        </div>
+        <div style="margin-top:12px;font-size:.74rem;color:var(--muted);line-height:1.8">
+          &nbsp;Missing columns are auto-generated<br>
+          &nbsp;Duplicate dates automatically removed<br>
+          &nbsp;Date formats like DD/MM/YYYY also work<br>
+          &nbsp;Training starts automatically after upload<br>
+          &nbsp;Minimum 60 rows required
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Training Log -->
+  <div class="section" id="trainingSection" style="display:none">
+    <div class="section-title"><span class="dot dot-yellow"></span> Training Progress</div>
+    <div class="log-box" id="logBox"></div>
+  </div>
+
+  <!-- Stat Cards -->
+  <div class="stat-grid" id="statGrid">
+    <div class="stat-card"><div class="label">Dataset</div><div class="value" id="s-days">—</div><div class="sub">Daily observations</div></div>
+    <div class="stat-card green"><div class="label">Best R²</div><div class="value" id="s-r2">—</div><div class="sub">Hybrid model</div></div>
+    <div class="stat-card purple"><div class="label">Best RMSE</div><div class="value" id="s-rmse">—</div><div class="sub">Hybrid model</div></div>
+    <div class="stat-card red"><div class="label">Anomalies</div><div class="value" id="s-anom">—</div><div class="sub">Detected &amp; classified</div></div>
+    <div class="stat-card yellow"><div class="label">Algo Updates</div><div class="value" id="s-algo">—</div><div class="sub">Google updates flagged</div></div>
+    <div class="stat-card"><div class="label">Features</div><div class="value" id="s-feat">16</div><div class="sub">Multivariate inputs</div></div>
+  </div>
+
+  <!-- Forecast Chart -->
+  <div class="section">
+    <div class="section-title"><span class="dot dot-purple"></span> Forecast — All Three Models vs Actual</div>
+    <div class="controls">
+      <select id="rangeSelect" onchange="updateForecastChart()">
+        <option value="90">Last 90 days</option>
+        <option value="180" selected>Last 180 days</option>
+        <option value="365">Last 365 days</option>
+        <option value="0">All</option>
+      </select>
+      <label style="font-size:.8rem;color:var(--muted);display:flex;align-items:center;gap:6px">
+        <input type="checkbox" id="showSarima" checked onchange="updateForecastChart()"> SARIMA
+      </label>
+      <label style="font-size:.8rem;color:var(--muted);display:flex;align-items:center;gap:6px">
+        <input type="checkbox" id="showGru" checked onchange="updateForecastChart()"> GRU
+      </label>
+      <label style="font-size:.8rem;color:var(--muted);display:flex;align-items:center;gap:6px">
+        <input type="checkbox" id="showHybrid" checked onchange="updateForecastChart()"> Hybrid
+      </label>
+    </div>
+    <div class="chart-wrap"><canvas id="forecastChart"></canvas></div>
+    <div class="loading" id="forecastLoading"><div class="spinner"></div><p style="margin-top:10px">Waiting for model training...</p></div>
+  </div>
+
+  <div class="grid-2">
+
+    <!-- Metrics Table -->
+    <div class="section">
+      <div class="section-title"><span class="dot dot-green"></span> Model Evaluation Metrics</div>
+      <div id="metricsLoading" class="loading" style="padding:20px"><div class="spinner"></div></div>
+      <table id="metricsTable" style="display:none">
+        <thead><tr><th>Model</th><th>RMSE</th><th>MAE</th><th>MAPE%</th><th>SMAPE%</th><th>R²</th></tr></thead>
+        <tbody id="metricsBody"></tbody>
+      </table>
+    </div>
+
+    <!-- Anomaly Cause Donut -->
+    <div class="section">
+      <div class="section-title"><span class="dot dot-red"></span> Anomaly Cause Distribution</div>
+      <div class="donut-wrap"><canvas id="donutChart"></canvas></div>
+    </div>
+
+  </div>
+
+  <!-- Anomaly List -->
+  <div class="section">
+    <div class="section-title"><span class="dot dot-red"></span> Detected Anomalies <span id="anomalyCount" style="color:var(--muted);font-size:.8rem"></span></div>
+    <div id="anomalyLoading" class="loading"><div class="spinner"></div></div>
+    <div class="anomaly-list" id="anomalyList"></div>
+  </div>
+
+</div>
+
+<script>
+let forecastData = null;
+let forecastChart = null;
+let donutChart = null;
+let pollTimer = null;
+
+const CAUSE_COLORS = {
+  'Algorithm Update Impact': '#6c63ff',
+  'Ranking Drop':            '#ff6b6b',
+  'Click Loss Anomaly':      '#ffd166',
+  'Traffic Spike':           '#00d4aa',
+  'Unexplained Drop':        '#f87171'
+};
+
+
+// ── Upload functions ─────────────────────────────────────────────────────────
+function onDragOver(e) {
+  e.preventDefault();
+  document.getElementById('dropZone').classList.add('dragover');
+}
+function onDragLeave(e) {
+  document.getElementById('dropZone').classList.remove('dragover');
+}
+function onDrop(e) {
+  e.preventDefault();
+  document.getElementById('dropZone').classList.remove('dragover');
+  const file = e.dataTransfer.files[0];
+  if (file) uploadFile(file);
+}
+function onFileSelected(e) {
+  const file = e.target.files[0];
+  if (file) uploadFile(file);
+}
+
+function showUploadMsg(type, text) {
+  const el = document.getElementById('uploadMsg');
+  el.className = `upload-msg ${type}`;
+  el.innerHTML = text;
+  el.style.display = 'block';
+}
+
+function showActiveFile(filename) {
+  document.getElementById('activeFileName').textContent = filename;
+  document.getElementById('activeFile').style.display = 'inline-flex';
+}
+
+function hideActiveFile() {
+  document.getElementById('activeFile').style.display = 'none';
+  document.getElementById('uploadMsg').style.display = 'none';
+}
+
+async function uploadFile(file) {
+  if (!file.name.endsWith('.csv')) {
+    showUploadMsg('error', 'Only .csv files are accepted.');
+    return;
+  }
+  showUploadMsg('info', 'Uploading and validating file...');
+  setStatus('training', 'Uploading...');
+
+  const form = new FormData();
+  form.append('file', file);
+
+  try {
+    const r = await fetch('/api/upload', { method: 'POST', body: form });
+    const d = await r.json();
+
+    if (!r.ok) {
+      showUploadMsg('error', `${d.error}`);
+      setStatus('idle', 'Upload failed');
+      return;
+    }
+
+    const info = d.info;
+    const renamed = Object.keys(info.columns_renamed || {}).length > 0
+      ? `<br>Auto-renamed: ${JSON.stringify(info.columns_renamed)}`
+      : '';
+    const filled = (info.auto_filled_cols || []).length > 0
+      ? `<br>Auto-generated: ${info.auto_filled_cols.slice(0,4).join(', ')}${info.auto_filled_cols.length > 4 ? '...' : ''}`
+      : '';
+
+    showUploadMsg('success',
+      `${file.name} uploaded successfully!<br>` +
+      `${info.rows?.toLocaleString()} rows &nbsp;|&nbsp; ` +
+      `${info.date_start} → ${info.date_end}` +
+      renamed + filled +
+      `<br><br>Training started automatically...`
+    );
+    showActiveFile(file.name);
+    showTrainingSection();
+    setStatus('training', 'Training on your dataset...');
+    pollTraining();
+
+  } catch(err) {
+    showUploadMsg('error', `Network error: ${err.message}`);
+    setStatus('error', 'Upload failed');
+  }
+}
+
+async function resetDataset() {
+  if (!confirm('Remove uploaded file and go back to the default dataset?')) return;
+  const r = await fetch('/api/reset', { method: 'POST' });
+  const d = await r.json();
+  if (r.ok) {
+    hideActiveFile();
+    showUploadMsg('info', ' Reset to default dataset. Training restarting...');
+    showTrainingSection();
+    setStatus('training', 'Training...');
+    pollTraining();
+  } else {
+    alert(d.error || 'Reset failed.');
+  }
+}
+
+// ── Init ────────────────────────────────────────────────────────────────────
+window.onload = () => {
+  checkStatus();
+};
+
+async function checkStatus() {
+  try {
+    const r = await fetch('/api/status');
+    const d = await r.json();
+
+    // Show active file if one is uploaded
+    if (d.upload_info && d.upload_info.filename) {
+      showActiveFile(d.upload_info.filename);
+    }
+
+    if (d.has_cache) {
+      setStatus('ready', `Model ready — ${d.active_file}`);
+      loadAll();
+    } else if (d.training.running) {
+      setStatus('training', 'Training...');
+      showTrainingSection();
+      pollTraining();
+    } else {
+      setStatus('idle', 'Upload a CSV or click "Train Models"');
+    }
+  } catch(e) { setStatus('error', 'Server error'); }
+}
+
+function setStatus(s, msg) {
+  const dot = document.getElementById('statusDot');
+  const txt = document.getElementById('statusText');
+  txt.textContent = msg;
+  dot.style.background = s === 'ready' ? '#00d4aa' : s === 'training' ? '#ffd166' : s === 'error' ? '#ff6b6b' : '#555';
+}
+
+async function startTraining() {
+  const r = await fetch('/api/train', {method:'POST'});
+  if (r.status === 409) { alert('Training already running'); return; }
+  showTrainingSection();
+  setStatus('training', 'Training...');
+  pollTraining();
+}
+
+function showTrainingSection() {
+  document.getElementById('trainingSection').style.display = 'block';
+}
+
+function pollTraining() {
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = setInterval(async () => {
+    const r = await fetch('/api/status');
+    const d = await r.json();
+    const log = d.training.log || [];
+    const box = document.getElementById('logBox');
+    box.innerHTML = log.map(l =>
+      `<div class="log-line ${l.startsWith('ERROR') ? 'err' : 'ok'}">› ${l}</div>`
+    ).join('');
+    box.scrollTop = box.scrollHeight;
+
+    if (d.has_cache && !d.training.running) {
+      clearInterval(pollTimer);
+      setStatus('ready', 'Training complete');
+      loadAll();
+    }
+    if (d.training.error) {
+      clearInterval(pollTimer);
+      setStatus('error', 'Training failed: ' + d.training.error);
+    }
+  }, 1500);
+}
+
+// ── Load everything ─────────────────────────────────────────────────────────
+async function loadAll() {
+  await Promise.all([loadForecast(), loadMetrics(), loadAnomalies(), loadDatasetInfo()]);
+}
+
+async function loadDatasetInfo() {
+  const r = await fetch('/api/dataset-info');
+  const d = await r.json();
+  document.getElementById('s-days').textContent  = d.total_rows?.toLocaleString() || '—';
+  document.getElementById('s-algo').textContent  = d.algo_updates || '—';
+  document.getElementById('s-feat').textContent  = d.n_features || 16;
+}
+
+// ── Forecast Chart ───────────────────────────────────────────────────────────
+async function loadForecast() {
+  const r = await fetch('/api/forecast');
+  forecastData = await r.json();
+  document.getElementById('forecastLoading').style.display = 'none';
+  buildForecastChart();
+}
+
+function updateForecastChart() { if (forecastData) buildForecastChart(); }
+
+function buildForecastChart() {
+  const n      = parseInt(document.getElementById('rangeSelect').value) || forecastData.dates.length;
+  const start  = n === 0 ? 0 : Math.max(0, forecastData.dates.length - n);
+  const slice  = (arr) => arr.slice(start);
+
+  const showS = document.getElementById('showSarima').checked;
+  const showG = document.getElementById('showGru').checked;
+  const showH = document.getElementById('showHybrid').checked;
+
+  const datasets = [
+    { label:'Actual',         data: slice(forecastData.actuals), borderColor:'#e2e8f0', borderWidth:1.5, pointRadius:0, fill:false },
+    showS && { label:'SARIMA',   data: slice(forecastData.sarima),  borderColor:'#6c63ff', borderWidth:1.5, pointRadius:0, fill:false, borderDash:[5,3] },
+    showG && { label:'GRU',      data: slice(forecastData.gru),     borderColor:'#00d4aa', borderWidth:1.5, pointRadius:0, fill:false, borderDash:[3,3] },
+    showH && { label:'Hybrid',   data: slice(forecastData.hybrid),  borderColor:'#ff6b6b', borderWidth:2,   pointRadius:0, fill:false },
+  ].filter(Boolean);
+
+  if (forecastChart) forecastChart.destroy();
+  forecastChart = new Chart(document.getElementById('forecastChart'), {
+    type: 'line',
+    data: { labels: slice(forecastData.dates), datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: false,
+      plugins: { legend: { labels: { color:'#94a3b8', font:{size:11} } } },
+      scales: {
+        x: { ticks:{ color:'#94a3b8', maxTicksLimit:10, font:{size:10} }, grid:{ color:'#1e2235' } },
+        y: { ticks:{ color:'#94a3b8', font:{size:10} }, grid:{ color:'#1e2235' } }
+      }
+    }
+  });
+}
+
+// ── Metrics ──────────────────────────────────────────────────────────────────
+async function loadMetrics() {
+  const r = await fetch('/api/metrics');
+  const d = await r.json();
+  document.getElementById('metricsLoading').style.display = 'none';
+  document.getElementById('metricsTable').style.display   = 'table';
+
+  // Find best (lowest RMSE)
+  const sorted = [...d.metrics].sort((a,b) => a.RMSE - b.RMSE);
+  const best   = sorted[0]?.model;
+
+  const tagClass = { 'SARIMA':'tag-sarima', 'GRU (Multivariate)':'tag-gru', 'SARIMA+GRU Hybrid':'tag-hybrid' };
+  document.getElementById('metricsBody').innerHTML = d.metrics.map(m => `
+    <tr>
+      <td><span class="model-tag ${tagClass[m.model] || ''}">${m.model}</span></td>
+      <td class="${m.model === best ? 'best' : ''}">${m.RMSE.toFixed(1)}</td>
+      <td>${m.MAE.toFixed(1)}</td>
+      <td>${m.MAPE.toFixed(2)}%</td>
+      <td>${m.SMAPE.toFixed(2)}%</td>
+      <td class="${m.model === best ? 'best' : ''}">${m.R2.toFixed(4)}</td>
+    </tr>`).join('');
+
+  // Update stat cards with hybrid metrics
+  const hybrid = d.metrics.find(m => m.model === 'SARIMA+GRU Hybrid') || sorted[0];
+  if (hybrid) {
+    document.getElementById('s-r2').textContent   = hybrid.R2.toFixed(4);
+    document.getElementById('s-rmse').textContent = hybrid.RMSE.toFixed(0);
+  }
+}
+
+// ── Anomalies ────────────────────────────────────────────────────────────────
+async function loadAnomalies() {
+  const r = await fetch('/api/anomalies');
+  const d = await r.json();
+
+  document.getElementById('anomalyLoading').style.display = 'none';
+  document.getElementById('s-anom').textContent = d.anomalies.length;
+  document.getElementById('anomalyCount').textContent = `(${d.anomalies.length} found)`;
+
+  // Anomaly list
+  const list = document.getElementById('anomalyList');
+  if (!d.anomalies.length) {
+    list.innerHTML = '<div style="color:var(--muted);font-size:.82rem;padding:10px">No anomalies detected in test period.</div>';
+  } else {
+    list.innerHTML = d.anomalies.slice(0, 60).map(a => {
+      const pct  = a.actual > 0 ? ((a.actual - a.predicted) / a.predicted * 100).toFixed(1) : 0;
+      const cls  = a.cause_label.includes('Spike') ? 'spike' : a.cause_label.includes('Algorithm') ? 'algo' : '';
+      return `
+      <div class="anomaly-card ${cls}">
+        <div class="anomaly-date"> ${a.date}</div>
+        <div class="anomaly-cause" style="color:${CAUSE_COLORS[a.cause_label] || '#e2e8f0'}">${a.cause_label}</div>
+        <span class="severity-tag sev-${a.severity.split(' ')[0].toLowerCase()}">${a.severity}</span>
+        <div style="font-size:.75rem;color:var(--muted)">σ = ${a.sigma}</div>
+        ${a.algo_flag ? '<span style="font-size:.7rem;background:rgba(108,99,255,.2);color:#6c63ff;padding:2px 7px;border-radius:10px">🔔 Algo Update</span>' : ''}
+        <div class="anomaly-delta">${pct > 0 ? '+' : ''}${pct}% vs predicted</div>
+      </div>`;
+    }).join('');
+  }
+
+  // Donut chart
+  buildDonut(d.summary?.by_cause || {});
+}
+
+function buildDonut(byCause) {
+  const labels = Object.keys(byCause);
+  const vals   = Object.values(byCause);
+  const colors = labels.map(l => CAUSE_COLORS[l] || '#555');
+
+  if (donutChart) donutChart.destroy();
+  if (!labels.length) return;
+
+  donutChart = new Chart(document.getElementById('donutChart'), {
+    type: 'doughnut',
+    data: { labels, datasets:[{ data: vals, backgroundColor: colors, borderWidth: 0, hoverOffset: 6 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { position:'right', labels:{ color:'#94a3b8', font:{size:10}, padding:12 } }
+      }
+    }
+  });
+}
+</script>
+</body>
+</html>

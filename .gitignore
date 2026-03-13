@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+*.pyo
+data/results_cache.json
+data/uploaded_dataset.csv
+data/upload_info.json
+.env
+*.zip
+node_modules/
+generate_doc.js
+SEO_Traffic_Forecasting_Report.docx
