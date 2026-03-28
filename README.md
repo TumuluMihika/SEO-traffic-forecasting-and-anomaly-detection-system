@@ -2,7 +2,6 @@
 
 A full-stack machine learning application that forecasts daily organic website traffic and automatically detects + classifies the **cause** of traffic anomalies — using a hybrid SARIMA + Neural Network model with 16 multivariate SEO features.
 
-> Built by a 3rd Year B.Tech CSE student (KIIT University, 2023–2027). Directly comparable to 4 published research papers (Ahmed et al. 2024, Samaan et al. 2025, Sikka & Kumar 2023, Shelatkar et al. 2020).
 
 ---
 
